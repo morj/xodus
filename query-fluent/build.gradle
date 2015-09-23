@@ -1,0 +1,26 @@
+plugins {
+    id "com.ewerk.gradle.plugins.querydsl" version "1.0.5"
+}
+
+querydsl {
+    library = "com.querydsl:querydsl-apt:$querydsl_version"
+    // querydslSourcesDir = file("src/generated/java")
+    QUERYDSL_PROC = "com.querydsl.apt.QuerydslAnnotationProcessor"
+    querydslDefault = true
+}
+
+dependencies {
+    compile project(':query')
+    compile "com.querydsl:querydsl-core:$querydsl_version"
+    //compile "com.querydsl:querydsl-apt:$querydsl_version"
+
+    testCompile "com.querydsl:querydsl-apt:$querydsl_version"
+    testCompile project(':entity-store').sourceSets.test.output
+    testCompile project(':utils').sourceSets.test.output
+}
+
+idea {
+    module {
+        sourceDirs += file('src/querydsl/java')
+    }
+}

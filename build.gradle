@@ -1,4 +1,6 @@
 buildscript {
+    apply from: 'components.gradle'
+
     repositories {
         jcenter()      // for license plugin
     }
@@ -27,6 +29,7 @@ subprojects {
     apply plugin: 'java'
     apply plugin: 'maven'
     apply plugin: 'signing'
+    apply plugin: 'idea'
 
     sourceCompatibility = 1.7
     compileJava.options.encoding = 'UTF-8'
