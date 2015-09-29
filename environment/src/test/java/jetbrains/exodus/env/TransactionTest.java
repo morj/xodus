@@ -20,17 +20,26 @@ import jetbrains.exodus.ByteIterable;
 import jetbrains.exodus.ExodusException;
 import jetbrains.exodus.TestUtil;
 import jetbrains.exodus.bindings.StringBinding;
+import jetbrains.exodus.core.execution.LatchJob;
 import jetbrains.exodus.log.LogConfig;
 import jetbrains.exodus.tree.btree.BTreeBase;
+import jetbrains.exodus.util.DeferredIO;
 import org.jetbrains.annotations.NotNull;
 import org.junit.Assert;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TestName;
 
 public class TransactionTest extends EnvironmentTestsBase {
 
+    @Rule
+    public TestName name = new TestName();
+
     @Override
     protected void createEnvironment() {
-        env = newContextualEnvironmentInstance(LogConfig.create(reader, writer));
+        env = name.getMethodName().contains("XD_471") ?
+                newEnvironmentInstance(LogConfig.create(reader, writer)) :
+                newContextualEnvironmentInstance(LogConfig.create(reader, writer));
     }
 
     @Test
@@ -335,5 +344,37 @@ public class TransactionTest extends EnvironmentTestsBase {
         } finally {
             txn.abort();
         }
+    }
+
+    @Test
+    public void test_XD_471() {
+        final Environment env = getEnvironment();
+        final Transaction[] txn = {null};
+        DeferredIO.getJobProcessor().waitForLatchJob(new LatchJob() {
+            @Override
+            protected void execute() throws Throwable {
+                txn[0] = env.beginTransaction();
+                release();
+            }
+        }, 100);
+        final Transaction tx = txn[0];
+        Assert.assertNotNull(tx);
+        tx.abort();
+    }
+
+    @Test
+    public void test_XD_471_() {
+        final Environment env = getEnvironment();
+        final Transaction[] txn = {null};
+        DeferredIO.getJobProcessor().waitForLatchJob(new LatchJob() {
+            @Override
+            protected void execute() throws Throwable {
+                txn[0] = env.beginReadonlyTransaction();
+                release();
+            }
+        }, 100);
+        final Transaction tx = txn[0];
+        Assert.assertNotNull(tx);
+        tx.abort();
     }
 }
