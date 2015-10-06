@@ -67,10 +67,6 @@ public abstract class ObjectCacheBase<K, V> extends CacheHitRateable {
         }
     }
 
-    public void fillWith(@NotNull final ObjectCacheBase<K, V> source, int maxCount) {
-        // by default do nothing
-    }
-
     public abstract void clear();
 
     public abstract void lock();
@@ -99,7 +95,7 @@ public abstract class ObjectCacheBase<K, V> extends CacheHitRateable {
     }
 
     @Override
-    protected void adjustHitRate() {
+    public void adjustHitRate() {
         lock();
         try {
             super.adjustHitRate();

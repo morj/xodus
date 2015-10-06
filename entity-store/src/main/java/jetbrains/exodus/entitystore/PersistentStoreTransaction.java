@@ -23,6 +23,7 @@ import jetbrains.exodus.bindings.LongBinding;
 import jetbrains.exodus.core.dataStructures.FakeObjectCache;
 import jetbrains.exodus.core.dataStructures.ObjectCache;
 import jetbrains.exodus.core.dataStructures.ObjectCacheBase;
+import jetbrains.exodus.core.dataStructures.ObjectCacheDecorator;
 import jetbrains.exodus.core.dataStructures.decorators.HashSetDecorator;
 import jetbrains.exodus.core.dataStructures.hash.LongHashMap;
 import jetbrains.exodus.core.dataStructures.hash.LongHashSet;
@@ -86,19 +87,15 @@ public class PersistentStoreTransaction implements StoreTransaction, TxnGetterSt
         this(store, false);
     }
 
-    PersistentStoreTransaction(@NotNull final PersistentEntityStoreImpl store,
-                               @NotNull final PersistentStoreTransaction source,
+    PersistentStoreTransaction(@NotNull final PersistentStoreTransaction source,
                                @NotNull final Transaction txn) {
-        this.store = store;
+        this.store = source.store;
         this.txn = txn;
         createdIterators = new HashSetDecorator<>();
         final PersistentEntityStoreConfig config = store.getConfig();
         propsCache = createObjectCache(config.getTransactionPropsCacheSize());
         linksCache = createObjectCache(config.getTransactionLinksCacheSize());
         blobStringsCache = createObjectCache(config.getTransactionBlobStringsCacheSize());
-        propsCache.fillWith(source.propsCache, COPY_CACHED_VALUES);
-        linksCache.fillWith(source.linksCache, COPY_CACHED_VALUES);
-        blobStringsCache.fillWith(source.blobStringsCache, COPY_CACHED_VALUES);
         localCache = source.localCache;
         localCacheAttempts = localCacheHits = 0;
     }
@@ -135,8 +132,12 @@ public class PersistentStoreTransaction implements StoreTransaction, TxnGetterSt
 
     @Override
     public boolean commit() {
-        apply();
-        return doCommit();
+        // txn can be read-only if Environment is in read-only mode
+        if (!txn.isReadonly()) {
+            apply();
+            return doCommit();
+        }
+        return true;
     }
 
     public boolean isCurrent() {
@@ -177,8 +178,12 @@ public class PersistentStoreTransaction implements StoreTransaction, TxnGetterSt
 
     @Override
     public boolean flush() {
-        apply();
-        return doFlush();
+        // txn can be read-only if Environment is in read-only mode
+        if (!txn.isReadonly()) {
+            apply();
+            return doFlush();
+        }
+        return true;
     }
 
     // exposed only for tests
@@ -210,14 +215,14 @@ public class PersistentStoreTransaction implements StoreTransaction, TxnGetterSt
                 mutableCache = localCache.getClone();
                 mutatedInTxn = new ArrayList<>();
             }
-            replayData.init(mutableCache.cache);
+            replayData.init(mutableCache.getCacheInstance());
             replayData.apply(mutableCache);
         }
     }
 
     public PersistentStoreTransaction getSnapshot() {
         // this snapshots should not be registered in store, hence no de-registration
-        return new PersistentStoreTransactionSnapshot(store, this, txn);
+        return new PersistentStoreTransactionSnapshot(this, txn);
     }
 
     @Override
@@ -943,7 +948,14 @@ public class PersistentStoreTransaction implements StoreTransaction, TxnGetterSt
     }
 
     private static <V> ObjectCacheBase<PropertyId, V> createObjectCache(final int size) {
-        return size == 0 ? new FakeObjectCache<PropertyId, V>() : new ObjectCache<PropertyId, V>(size);
+        return size == 0 ?
+                new FakeObjectCache<PropertyId, V>() :
+                new ObjectCacheDecorator<PropertyId, V>(size) {
+                    @Override
+                    protected ObjectCacheBase<PropertyId, V> createdDecorated() {
+                        return new ObjectCache<PropertyId, V>(size());
+                    }
+                };
     }
 
     enum HandleCheckResult {
