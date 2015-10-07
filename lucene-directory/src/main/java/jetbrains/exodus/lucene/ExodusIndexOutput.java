@@ -15,7 +15,6 @@
  */
 package jetbrains.exodus.lucene;
 
-import jetbrains.exodus.env.Transaction;
 import jetbrains.exodus.vfs.File;
 import jetbrains.exodus.vfs.VirtualFileSystem;
 import org.apache.lucene.store.IndexOutput;
@@ -27,22 +26,23 @@ import java.io.OutputStream;
 public class ExodusIndexOutput extends IndexOutput {
 
     @NotNull
-    private final VirtualFileSystem vfs;
+    private final ExodusDirectory directory;
     @NotNull
     private final File file;
-    @NotNull
-    private final Transaction txn;
     @NotNull
     private OutputStream output;
     private long currentPosition;
 
-    public ExodusIndexOutput(@NotNull final VirtualFileSystem vfs,
-                             @NotNull final Transaction txn,
-                             @NotNull final File file) {
-        this.vfs = vfs;
+    public ExodusIndexOutput(@NotNull final ExodusDirectory directory,
+                             @NotNull final String name) {
+        this.directory = directory;
+        final VirtualFileSystem vfs = directory.getVfs();
+        final File file = vfs.openFile(directory.getEnvironment().getAndCheckCurrentTransaction(), name, true);
+        if (file == null) {
+            throw new NullPointerException("Can't be");
+        }
         this.file = file;
-        this.txn = txn;
-        output = vfs.writeFile(txn, file);
+        output = vfs.writeFile(directory.getEnvironment().getAndCheckCurrentTransaction(), file);
         currentPosition = 0;
     }
 
@@ -65,14 +65,14 @@ public class ExodusIndexOutput extends IndexOutput {
     public void seek(long pos) throws IOException {
         if (pos != currentPosition) {
             output.close();
-            output = vfs.writeFile(txn, file, pos);
+            output = directory.getVfs().writeFile(directory.getEnvironment().getAndCheckCurrentTransaction(), file, pos);
             currentPosition = pos;
         }
     }
 
     @Override
     public long length() throws IOException {
-        return vfs.getFileLength(txn, file);
+        return directory.getVfs().getFileLength(directory.getEnvironment().getAndCheckCurrentTransaction(), file);
     }
 
     @Override
