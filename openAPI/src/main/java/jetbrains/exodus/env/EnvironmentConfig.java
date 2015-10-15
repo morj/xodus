@@ -66,6 +66,10 @@ public final class EnvironmentConfig extends AbstractConfig {
 
     public static final String ENV_TXN_REPLAY_MAX_COUNT = "exodus.env.txn.replayMaxCount";
 
+    public static final String ENV_MAX_PARALLEL_TXNS = "exodus.env.maxParallelTxns";
+
+    public static final String ENV_MAX_PARALLEL_READONLY_TXNS = "exodus.env.maxParallelReadonlyTxns";
+
     public static final String ENV_MONITOR_TXNS_TIMEOUT = "exodus.env.monitorTxns.timeout"; // in milliseconds
 
     public static final String ENV_MONITOR_TXNS_CHECK_FREQ = "exodus.env.monitorTxns.checkFreq"; // in milliseconds
@@ -103,6 +107,8 @@ public final class EnvironmentConfig extends AbstractConfig {
 
     public static final String GC_UTILIZATION_FROM_SCRATCH = "exodus.gc.utilization.fromScratch";
 
+    public static final String GC_USE_EXCLUSIVE_TRANSACTION = "exodus.gc.useExclusiveTransaction";
+
     public static final String MANAGEMENT_ENABLED = "exodus.managementEnabled";
 
     public EnvironmentConfig() {
@@ -129,6 +135,8 @@ public final class EnvironmentConfig extends AbstractConfig {
                 new Pair(ENV_CLOSE_FORCEDLY, false),
                 new Pair(ENV_TXN_REPLAY_TIMEOUT, 1000L),
                 new Pair(ENV_TXN_REPLAY_MAX_COUNT, 2),
+                new Pair(ENV_MAX_PARALLEL_TXNS, Integer.MAX_VALUE),
+                new Pair(ENV_MAX_PARALLEL_READONLY_TXNS, Integer.MAX_VALUE),
                 new Pair(ENV_MONITOR_TXNS_CHECK_FREQ, 60000),
                 new Pair(ENV_GATHER_STATISTICS, true),
                 new Pair(ENV_MONITOR_TXNS_TIMEOUT, 0),
@@ -143,6 +151,7 @@ public final class EnvironmentConfig extends AbstractConfig {
                 new Pair(GC_FILES_INTERVAL, 1),
                 new Pair(GC_RUN_PERIOD, 30000),
                 new Pair(GC_UTILIZATION_FROM_SCRATCH, false),
+                new Pair(GC_USE_EXCLUSIVE_TRANSACTION, true),
                 new Pair(MANAGEMENT_ENABLED, true)
         }, strategy);
     }
@@ -164,7 +173,7 @@ public final class EnvironmentConfig extends AbstractConfig {
         return (Integer) getSetting(MEMORY_USAGE_PERCENTAGE);
     }
 
-    public EnvironmentConfig setMemoryUsagePercentage(int memoryUsagePercentage) {
+    public EnvironmentConfig setMemoryUsagePercentage(final int memoryUsagePercentage) {
         return setSetting(MEMORY_USAGE_PERCENTAGE, memoryUsagePercentage);
     }
 
@@ -172,7 +181,7 @@ public final class EnvironmentConfig extends AbstractConfig {
         return (Boolean) getSetting(LOG_DURABLE_WRITE);
     }
 
-    public EnvironmentConfig setLogDurableWrite(boolean durableWrite) {
+    public EnvironmentConfig setLogDurableWrite(final boolean durableWrite) {
         return setSetting(LOG_DURABLE_WRITE, durableWrite);
     }
 
@@ -180,7 +189,7 @@ public final class EnvironmentConfig extends AbstractConfig {
         return (Long) getSetting(LOG_FILE_SIZE);
     }
 
-    public EnvironmentConfig setLogFileSize(long kilobytes) {
+    public EnvironmentConfig setLogFileSize(final long kilobytes) {
         return setSetting(LOG_FILE_SIZE, kilobytes);
     }
 
@@ -188,7 +197,7 @@ public final class EnvironmentConfig extends AbstractConfig {
         return (Long) getSetting(LOG_LOCK_TIMEOUT);
     }
 
-    public EnvironmentConfig setLogLockTimeout(long millis) {
+    public EnvironmentConfig setLogLockTimeout(final long millis) {
         return setSetting(LOG_LOCK_TIMEOUT, millis);
     }
 
@@ -196,7 +205,7 @@ public final class EnvironmentConfig extends AbstractConfig {
         return (Integer) getSetting(LOG_CACHE_PAGE_SIZE);
     }
 
-    public EnvironmentConfig setLogCachePageSize(int bytes) {
+    public EnvironmentConfig setLogCachePageSize(final int bytes) {
         return setSetting(LOG_CACHE_PAGE_SIZE, bytes);
     }
 
@@ -204,7 +213,7 @@ public final class EnvironmentConfig extends AbstractConfig {
         return (Integer) getSetting(LOG_CACHE_OPEN_FILES);
     }
 
-    public EnvironmentConfig setLogCacheOpenFilesCount(int files) {
+    public EnvironmentConfig setLogCacheOpenFilesCount(final int files) {
         return setSetting(LOG_CACHE_OPEN_FILES, files);
     }
 
@@ -212,7 +221,7 @@ public final class EnvironmentConfig extends AbstractConfig {
         return (Boolean) getSetting(LOG_CACHE_SHARED);
     }
 
-    public EnvironmentConfig setLogCacheShared(boolean shared) {
+    public EnvironmentConfig setLogCacheShared(final boolean shared) {
         return setSetting(LOG_CACHE_SHARED, shared);
     }
 
@@ -220,7 +229,7 @@ public final class EnvironmentConfig extends AbstractConfig {
         return (Boolean) getSetting(LOG_CACHE_NON_BLOCKING);
     }
 
-    public EnvironmentConfig setLogCacheNonBlocking(boolean nonBlocking) {
+    public EnvironmentConfig setLogCacheNonBlocking(final boolean nonBlocking) {
         return setSetting(LOG_CACHE_NON_BLOCKING, nonBlocking);
     }
 
@@ -228,7 +237,7 @@ public final class EnvironmentConfig extends AbstractConfig {
         return (Boolean) getSetting(LOG_CLEAN_DIRECTORY_EXPECTED);
     }
 
-    public EnvironmentConfig setLogCleanDirectoryExpected(boolean logCleanDirectoryExpected) {
+    public EnvironmentConfig setLogCleanDirectoryExpected(final boolean logCleanDirectoryExpected) {
         return setSetting(LOG_CLEAN_DIRECTORY_EXPECTED, logCleanDirectoryExpected);
     }
 
@@ -236,7 +245,7 @@ public final class EnvironmentConfig extends AbstractConfig {
         return (Boolean) getSetting(LOG_CLEAR_INVALID);
     }
 
-    public EnvironmentConfig setLogClearInvalid(boolean logClearInvalid) {
+    public EnvironmentConfig setLogClearInvalid(final boolean logClearInvalid) {
         return setSetting(LOG_CLEAR_INVALID, logClearInvalid);
     }
 
@@ -244,7 +253,7 @@ public final class EnvironmentConfig extends AbstractConfig {
         return (Long) getSetting(LOG_SYNC_PERIOD);
     }
 
-    public EnvironmentConfig setLogSyncPeriod(long millis) {
+    public EnvironmentConfig setLogSyncPeriod(final long millis) {
         return setSetting(LOG_SYNC_PERIOD, millis);
     }
 
@@ -279,7 +288,7 @@ public final class EnvironmentConfig extends AbstractConfig {
         return (Boolean) getSetting(ENV_CLOSE_FORCEDLY);
     }
 
-    public EnvironmentConfig setEnvCloseForcedly(boolean closeForcedly) {
+    public EnvironmentConfig setEnvCloseForcedly(final boolean closeForcedly) {
         return setSetting(ENV_CLOSE_FORCEDLY, closeForcedly);
     }
 
@@ -303,6 +312,22 @@ public final class EnvironmentConfig extends AbstractConfig {
             throw new InvalidSettingException("Negative transaction replay count");
         }
         return setSetting(ENV_TXN_REPLAY_MAX_COUNT, count);
+    }
+
+    public int getEnvMaxParallelTxns() {
+        return (Integer) getSetting(ENV_MAX_PARALLEL_TXNS);
+    }
+
+    public EnvironmentConfig setEnvMaxParallelTxns(final int maxParallelTxns) {
+        return setSetting(ENV_MAX_PARALLEL_TXNS, maxParallelTxns);
+    }
+
+    public int getEnvMaxParallelReadonlyTxns() {
+        return (Integer) getSetting(ENV_MAX_PARALLEL_READONLY_TXNS);
+    }
+
+    public EnvironmentConfig setEnvMaxParallelReadonlyTxns(final int maxParallelReadonlyTxns) {
+        return setSetting(ENV_MAX_PARALLEL_TXNS, maxParallelReadonlyTxns);
     }
 
     public int getEnvMonitorTxnsTimeout() {
@@ -416,7 +441,7 @@ public final class EnvironmentConfig extends AbstractConfig {
         return (Integer) getSetting(GC_FILES_INTERVAL);
     }
 
-    public EnvironmentConfig setGcFilesInterval(int files) throws InvalidSettingException {
+    public EnvironmentConfig setGcFilesInterval(final int files) throws InvalidSettingException {
         if (files < 1) {
             throw new InvalidSettingException("Invalid number of files: " + files);
         }
@@ -438,8 +463,16 @@ public final class EnvironmentConfig extends AbstractConfig {
         return (Boolean) getSetting(GC_UTILIZATION_FROM_SCRATCH);
     }
 
-    public EnvironmentConfig setGcUtilizationFromScratch(boolean fromScratch) {
+    public EnvironmentConfig setGcUtilizationFromScratch(final boolean fromScratch) {
         return setSetting(GC_UTILIZATION_FROM_SCRATCH, fromScratch);
+    }
+
+    public boolean getGcUseExclusiveTransaction() {
+        return (Boolean) getSetting(GC_USE_EXCLUSIVE_TRANSACTION);
+    }
+
+    public EnvironmentConfig setGcUseExclusiveTransaction(final boolean useExclusiveTransaction) {
+        return setSetting(GC_USE_EXCLUSIVE_TRANSACTION, useExclusiveTransaction);
     }
 
     public boolean isManagementEnabled() {

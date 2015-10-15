@@ -42,7 +42,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.ref.SoftReference;
 import java.util.*;
-import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class EnvironmentImpl implements Environment {
@@ -71,8 +70,8 @@ public class EnvironmentImpl implements Environment {
     private final GarbageCollector gc;
     private final Object commitLock = new Object();
     private final Object metaLock = new Object();
-    private final Semaphore txnSemaphore;
-    private final Semaphore roTxnSemaphore;
+    private final ReentrantTransactionDispatcher txnDispatcher;
+    private final ReentrantTransactionDispatcher roTxnDispatcher;
     @NotNull
     private final EnvironmentStatistics statistics;
     @Nullable
@@ -106,8 +105,8 @@ public class EnvironmentImpl implements Environment {
 
         gc = new GarbageCollector(this);
 
-        txnSemaphore = new Semaphore(Integer.MAX_VALUE, true);
-        roTxnSemaphore = new Semaphore(Integer.MAX_VALUE, true);
+        txnDispatcher = new ReentrantTransactionDispatcher(ec.getEnvMaxParallelTxns());
+        roTxnDispatcher = new ReentrantTransactionDispatcher(ec.getEnvMaxParallelReadonlyTxns());
 
         statistics = new EnvironmentStatistics(this);
         if (ec.isManagementEnabled()) {
@@ -215,46 +214,22 @@ public class EnvironmentImpl implements Environment {
     @Override
     public TransactionBase beginReadonlyTransaction(final Runnable beginHook) {
         checkIsOperative();
-        return new ReadonlyTransaction(this, getCreatingThread(), beginHook);
+        return new ReadonlyTransaction(this, beginHook);
     }
 
     @NotNull
     public TransactionImpl beginGCTransaction() {
-        return throwIfReadonly(beginTransaction(null, true, true), "Can't start GC transaction on read-only Environment");
+        return throwIfReadonly(beginTransaction(null, ec.getGcUseExclusiveTransaction(), true), "Can't start GC transaction on read-only Environment");
     }
 
     @Override
     public void executeInTransaction(@NotNull final TransactionalExecutable executable) {
-        final Transaction txn = beginTransaction();
-        try {
-            while (true) {
-                executable.execute(txn);
-                // txn can be read-only if Environment is in read-only mode
-                if (txn.isReadonly() || txn.flush()) {
-                    break;
-                }
-                txn.revert();
-            }
-        } finally {
-            txn.abort();
-        }
+        executeInTransaction(executable, beginTransaction());
     }
 
     @Override
     public void executeInExclusiveTransaction(@NotNull final TransactionalExecutable executable) {
-        final Transaction txn = beginExclusiveTransaction();
-        try {
-            while (true) {
-                executable.execute(txn);
-                // txn can be read-only if Environment is in read-only mode
-                if (txn.isReadonly() || txn.flush()) {
-                    break;
-                }
-                txn.revert();
-            }
-        } finally {
-            txn.abort();
-        }
+        executeInTransaction(executable, beginExclusiveTransaction());
     }
 
     @Override
@@ -269,36 +244,12 @@ public class EnvironmentImpl implements Environment {
 
     @Override
     public <T> T computeInTransaction(@NotNull TransactionalComputable<T> computable) {
-        final Transaction txn = beginTransaction();
-        try {
-            while (true) {
-                final T result = computable.compute(txn);
-                // txn can be read-only if Environment is in read-only mode
-                if (txn.isReadonly() || txn.flush()) {
-                    return result;
-                }
-                txn.revert();
-            }
-        } finally {
-            txn.abort();
-        }
+        return computeInTransaction(computable, beginTransaction());
     }
 
     @Override
     public <T> T computeInExclusiveTransaction(@NotNull TransactionalComputable<T> computable) {
-        final Transaction txn = beginExclusiveTransaction();
-        try {
-            while (true) {
-                final T result = computable.compute(txn);
-                // txn can be read-only if Environment is in read-only mode
-                if (txn.isReadonly() || txn.flush()) {
-                    return result;
-                }
-                txn.revert();
-            }
-        } finally {
-            txn.abort();
-        }
+        return computeInTransaction(computable, beginExclusiveTransaction());
     }
 
     @Override
@@ -327,9 +278,10 @@ public class EnvironmentImpl implements Environment {
     public void clear() {
         suspendGC();
         try {
-            acquireTransaction(true, false); // wait for and stop all writing transactions
+            final Thread currentThread = Thread.currentThread();
+            final int permits = txnDispatcher.acquireTransaction(currentThread, true);// wait for and stop all writing transactions
             try {
-                acquireTransaction(true, true); // wait for and stop all read-only transactions
+                final int roPermits = roTxnDispatcher.acquireTransaction(currentThread, true);// wait for and stop all read-only transactions
                 try {
                     synchronized (commitLock) {
                         synchronized (metaLock) {
@@ -343,10 +295,10 @@ public class EnvironmentImpl implements Environment {
                         }
                     }
                 } finally {
-                    releaseTransaction(true, true);
+                    roTxnDispatcher.releaseTransaction(currentThread, roPermits);
                 }
             } finally {
-                releaseTransaction(true, false);
+                txnDispatcher.releaseTransaction(currentThread, permits);
             }
         } finally {
             resumeGC();
@@ -483,7 +435,7 @@ public class EnvironmentImpl implements Environment {
     }
 
     protected void finishTransaction(@NotNull final TransactionBase txn) {
-        releaseTransaction(txn.isExclusive(), txn.isReadonly());
+        releaseTransaction(txn);
         txns.remove(txn);
         txn.setIsFinished();
         runTransactionSafeTasks();
@@ -492,35 +444,30 @@ public class EnvironmentImpl implements Environment {
     @NotNull
     protected TransactionBase beginTransaction(Runnable beginHook, boolean exclusive, boolean cloneMeta) {
         checkIsOperative();
-        final Thread creatingThread = getCreatingThread();
         return ec.getEnvIsReadonly() ?
-                new ReadonlyTransaction(this, creatingThread, beginHook) :
-                new TransactionImpl(this, creatingThread, beginHook, exclusive, cloneMeta);
-    }
-
-    protected Thread getCreatingThread() {
-        return transactionTimeout() > 0 ? Thread.currentThread() : null;
+                new ReadonlyTransaction(this, beginHook) :
+                new TransactionImpl(this, beginHook, exclusive, cloneMeta);
     }
 
     long getDiskUsage() {
         return IOUtil.getDirectorySize(new File(getLocation()), LogUtil.LOG_FILE_EXTENSION, false);
     }
 
-    void acquireTransaction(final boolean exclusive, final boolean readonly) {
-        final Semaphore semaphore = readonly ? roTxnSemaphore : txnSemaphore;
-        semaphore.acquireUninterruptibly(exclusive ? Integer.MAX_VALUE : 1);
+    void acquireTransaction(@NotNull final TransactionBase txn) {
+        final ReentrantTransactionDispatcher dispatcher = txn.isReadonly() ? roTxnDispatcher : txnDispatcher;
+        dispatcher.acquireTransaction(txn);
     }
 
-    void releaseTransaction(final boolean exclusive, final boolean readonly) {
-        final Semaphore semaphore = readonly ? roTxnSemaphore : txnSemaphore;
-        semaphore.release(exclusive ? Integer.MAX_VALUE : 1);
+    void releaseTransaction(@NotNull final TransactionBase txn) {
+        final ReentrantTransactionDispatcher dispatcher = txn.isReadonly() ? roTxnDispatcher : txnDispatcher;
+        dispatcher.releaseTransaction(txn);
     }
 
     boolean shouldTransactionBeExclusive(@NotNull final TransactionImpl txn) {
         final int replayCount = txn.getReplayCount();
         return replayCount > 0 &&
                 (ec.getEnvTxnReplayMaxCount() == replayCount ||
-                        System.currentTimeMillis() >= txn.getCreated() + ec.getEnvTxnReplayTimeout());
+                        System.currentTimeMillis() - txn.getCreated() >= ec.getEnvTxnReplayTimeout());
     }
 
     /**
@@ -610,7 +557,7 @@ public class EnvironmentImpl implements Environment {
     }
 
     MetaTree holdNewestSnapshotBy(@NotNull final TransactionBase txn) {
-        acquireTransaction(txn.isExclusive(), txn.isReadonly());
+        acquireTransaction(txn);
         final Runnable beginHook = txn.getBeginHook();
         synchronized (metaLock) {
             if (beginHook != null) {
@@ -889,6 +836,38 @@ public class EnvironmentImpl implements Environment {
             } catch (IOException e) {
                 throw ExodusException.toExodusException(e);
             }
+        }
+    }
+
+    private static void executeInTransaction(@NotNull final TransactionalExecutable executable,
+                                             @NotNull final Transaction txn) {
+        try {
+            while (true) {
+                executable.execute(txn);
+                // txn can be read-only if Environment is in read-only mode
+                if (txn.isReadonly() || txn.flush()) {
+                    break;
+                }
+                txn.revert();
+            }
+        } finally {
+            txn.abort();
+        }
+    }
+
+    private static <T> T computeInTransaction(@NotNull final TransactionalComputable<T> computable,
+                                              @NotNull final Transaction txn) {
+        try {
+            while (true) {
+                final T result = computable.compute(txn);
+                // txn can be read-only if Environment is in read-only mode
+                if (txn.isReadonly() || txn.flush()) {
+                    return result;
+                }
+                txn.revert();
+            }
+        } finally {
+            txn.abort();
         }
     }
 

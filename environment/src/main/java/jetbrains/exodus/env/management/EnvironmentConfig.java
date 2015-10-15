@@ -178,6 +178,16 @@ public class EnvironmentConfig extends MBeanBase implements EnvironmentConfigMBe
     }
 
     @Override
+    public int getEnvMaxParallelTxns() {
+        return config.getEnvMaxParallelTxns();
+    }
+
+    @Override
+    public int getEnvMaxParallelReadonlyTxns() {
+        return config.getEnvMaxParallelReadonlyTxns();
+    }
+
+    @Override
     public int getEnvMonitorTxnsTimeout() {
         return config.getEnvMonitorTxnsTimeout();
     }
@@ -280,6 +290,16 @@ public class EnvironmentConfig extends MBeanBase implements EnvironmentConfigMBe
     @Override
     public boolean getGcUtilizationFromScratch() {
         return config.getGcUtilizationFromScratch();
+    }
+
+    @Override
+    public boolean getGcUseExclusiveTransaction() {
+        return config.getGcUseExclusiveTransaction();
+    }
+
+    @Override
+    public void setGcUseExclusiveTransaction(boolean useExclusiveTransaction) {
+        config.setGcUseExclusiveTransaction(useExclusiveTransaction);
     }
 
     @Override

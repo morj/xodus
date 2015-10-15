@@ -67,6 +67,10 @@ public interface EnvironmentConfigMBean {
 
     void setEnvTxnReplayMaxCount(final int txnReplayMaxCount);
 
+    int getEnvMaxParallelTxns();
+
+    int getEnvMaxParallelReadonlyTxns();
+
     int getEnvMonitorTxnsTimeout();
 
     int getEnvMonitorTxnsCheckFreq();
@@ -108,6 +112,10 @@ public interface EnvironmentConfigMBean {
     void setGcRunPeriod(int runPeriod);
 
     boolean getGcUtilizationFromScratch();
+
+    boolean getGcUseExclusiveTransaction();
+
+    void setGcUseExclusiveTransaction(boolean useExclusiveTransaction);
 
     void close();
 }

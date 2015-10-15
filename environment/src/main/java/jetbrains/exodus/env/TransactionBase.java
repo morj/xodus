@@ -31,7 +31,7 @@ public abstract class TransactionBase implements Transaction {
 
     @NotNull
     private final EnvironmentImpl env;
-    @Nullable
+    @NotNull
     private final Thread creatingThread;
     private MetaTree metaTree;
     @NotNull
@@ -42,12 +42,11 @@ public abstract class TransactionBase implements Transaction {
     private long started;       // started is the ticks when the txn held its current snapshot
     private boolean isExclusive;
     private boolean isFinished;
+    private int acquiredPermits;
 
-    public TransactionBase(@NotNull final EnvironmentImpl env,
-                           @Nullable final Thread creatingThread,
-                           final boolean isExclusive) {
+    public TransactionBase(@NotNull final EnvironmentImpl env, final boolean isExclusive) {
         this.env = env;
-        this.creatingThread = creatingThread;
+        this.creatingThread = Thread.currentThread();
         this.isExclusive = isExclusive;
         immutableTrees = new IntHashMap<>();
         trace = env.transactionTimeout() > 0 ? new Throwable() : null;
@@ -89,7 +88,7 @@ public abstract class TransactionBase implements Transaction {
         return result;
     }
 
-    @Nullable
+    @NotNull
     Thread getCreatingThread() {
         return creatingThread;
     }
@@ -140,6 +139,14 @@ public abstract class TransactionBase implements Transaction {
     List<String> getAllStoreNames() {
         checkIsFinished();
         return getMetaTree().getAllStoreNames();
+    }
+
+    public int getAcquiredPermits() {
+        return acquiredPermits;
+    }
+
+    public void setAcquiredPermits(final int acquiredPermits) {
+        this.acquiredPermits = acquiredPermits;
     }
 
     @Nullable
